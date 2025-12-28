@@ -1,14 +1,80 @@
 import { useRef, useMemo, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Vector3, Quaternion, Matrix4, PlaneGeometry, CanvasTexture, MeshBasicMaterial, DoubleSide, Sphere } from 'three'
+import { CanvasTexture, PlaneGeometry, ShaderMaterial, DoubleSide, Vector3, Matrix4, Quaternion, InstancedBufferAttribute } from 'three'
 
 const MAX_TRACK_SEGMENTS = 1500
-const SEGMENT_LENGTH = 0.3 // Length of each track segment
-const MIN_SPAWN_DISTANCE = 0.15 // Minimum distance before spawning new segment
-const MAX_SPAWN_DISTANCE = 2.0 // Maximum distance - if exceeded, reset tracking (prevents long jumps)
-const TRACK_FADE_TIME = 30 // Seconds before tracks start fading
-const TRACK_FADE_DURATION = 15 // Seconds to fully fade out
-const MAX_TRACK_DISTANCE = 80 // Maximum distance from vehicle before tracks are removed
+const SEGMENT_LENGTH = 0.3
+const MIN_SPAWN_DISTANCE = 0.15
+const MAX_SPAWN_DISTANCE = 2.0
+const TRACK_FADE_TIME = 30
+const TRACK_FADE_DURATION = 15
+const MAX_TRACK_DISTANCE = 80
+
+const SLIP_THRESHOLD = 2.0
+
+// Simple seeded random for consistent texture generation
+const seededRandom = (seed) => {
+	const x = Math.sin(seed) * 10000
+	return x - Math.floor(x)
+}
+
+// Vertex shader - passes instance data to fragment shader
+const vertexShader = `
+  attribute float aSpawnTime;
+  attribute float aSpawnOrder;
+  
+  varying float vSpawnTime;
+  varying float vSpawnOrder;
+  varying vec2 vUv;
+  
+  void main() {
+    vUv = uv;
+    vSpawnTime = aSpawnTime;
+    vSpawnOrder = aSpawnOrder;
+    gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+  }
+`
+
+// Fragment shader - handles GPU-based fading
+const fragmentShader = `
+  uniform sampler2D uTexture;
+  uniform float uTime;
+  uniform float uSpawnCounter;
+  uniform float uMaxSegments;
+  uniform float uTrackFadeTime;
+  uniform float uTrackFadeDuration;
+  
+  varying float vSpawnTime;
+  varying float vSpawnOrder;
+  varying vec2 vUv;
+  
+  void main() {
+    vec4 texColor = texture2D(uTexture, vUv);
+    
+    // Time-based fade
+    float age = uTime - vSpawnTime;
+    float timeFade = 0.0;
+    if (age > uTrackFadeTime) {
+      timeFade = min(1.0, (age - uTrackFadeTime) / uTrackFadeDuration);
+    }
+    
+    // Distance-based fade (order-based)
+    float orderAge = uSpawnCounter - vSpawnOrder;
+    float normalizedAge = min(1.0, orderAge / uMaxSegments);
+    float orderFade = normalizedAge * normalizedAge;
+    
+    // Use stronger of the two fades
+    float fade = max(timeFade, orderFade);
+    
+    // Apply fade to alpha
+    float alpha = (1.0 - fade) * texColor.a;
+    
+    // Discard fully faded fragments
+    if (alpha < 0.01) discard;
+    
+    gl_FragColor = vec4(texColor.rgb, alpha);
+  }
+`
 
 // Generate a procedural tire track texture using canvas
 const createTrackTexture = () => {
@@ -35,9 +101,10 @@ const createTrackTexture = () => {
 			const x = startX + col * (blockWidth + gap)
 			const y = row * (blockHeight + gap) + 8
 
-			// Slightly randomize block dimensions for natural look
-			const randW = blockWidth + (Math.random() - 0.5) * 3
-			const randH = blockHeight + (Math.random() - 0.5) * 2
+			// Use seeded random for consistent texture across renders
+			const seed = row * cols + col
+			const randW = blockWidth + (seededRandom(seed) - 0.5) * 3
+			const randH = blockHeight + (seededRandom(seed + 100) - 0.5) * 2
 
 			// Calculate fade factor based on distance from edges
 			const centerX = canvas.width / 2
@@ -111,13 +178,8 @@ const createTrackTexture = () => {
 	return texture
 }
 
-const SLIP_THRESHOLD = 2.0 // Minimum lateral velocity (m/s) to consider wheel slipping
-
 const TireTracks = ({ vehicleController, wheelRefs, tireWidth = 0.28, tireRadius = 0.4 }) => {
 	const meshRef = useRef()
-
-	// Calculate track width from tire width (in meters)
-	const trackWidth = tireWidth
 
 	// Create texture once
 	const trackTexture = useMemo(() => createTrackTexture(), [])
@@ -130,16 +192,22 @@ const TireTracks = ({ vehicleController, wheelRefs, tireWidth = 0.28, tireRadius
 		return geo
 	}, [])
 
-	// Create material - we'll control opacity via instance color alpha simulation
+	// Create shader material with GPU-based fading
 	const material = useMemo(() => {
-		return new MeshBasicMaterial({
-			map: trackTexture,
+		return new ShaderMaterial({
+			uniforms: {
+				uTexture: { value: trackTexture },
+				uTime: { value: 0 },
+				uSpawnCounter: { value: 0 },
+				uMaxSegments: { value: MAX_TRACK_SEGMENTS },
+				uTrackFadeTime: { value: TRACK_FADE_TIME },
+				uTrackFadeDuration: { value: TRACK_FADE_DURATION },
+			},
+			vertexShader,
+			fragmentShader,
 			transparent: true,
 			depthWrite: false,
 			side: DoubleSide,
-			polygonOffset: true,
-			polygonOffsetFactor: -1,
-			polygonOffsetUnits: -1,
 		})
 	}, [trackTexture])
 
@@ -150,24 +218,30 @@ const TireTracks = ({ vehicleController, wheelRefs, tireWidth = 0.28, tireRadius
 			data.push({
 				active: false,
 				position: new Vector3(),
-				rotation: 0, // Y rotation
+				rotation: 0,
 				spawnTime: 0,
 				wheelIndex: 0,
-				spawnOrder: 0, // Track spawn order for distance-based fading
+				spawnOrder: 0,
 			})
 		}
 		return data
 	}, [])
 
 	// Track last spawn position per wheel and whether we're actively tracking
-	const lastSpawnPos = useRef(wheelRefs.map(() => new Vector3()))
-	const isTracking = useRef(wheelRefs.map(() => false))
+	const lastSpawnPos = useRef([])
+	const isTracking = useRef([])
+
+	// Ensure tracking arrays match wheelRefs length
+	if (lastSpawnPos.current.length !== wheelRefs.length) {
+		lastSpawnPos.current = wheelRefs.map(() => new Vector3())
+		isTracking.current = wheelRefs.map(() => false)
+	}
 
 	// Round-robin index for segment allocation
 	const nextSegmentIndex = useRef(0)
 	// Global spawn counter for distance-based fading
 	const spawnCounter = useRef(0)
-	// Track active segment indices for efficient iteration
+	// Track active segment indices for distance culling
 	const activeSegments = useRef(new Set())
 
 	// Temp objects for calculations
@@ -190,13 +264,26 @@ const TireTracks = ({ vehicleController, wheelRefs, tireWidth = 0.28, tireRadius
 			for (let i = 0; i < MAX_TRACK_SEGMENTS; i++) {
 				meshRef.current.setMatrixAt(i, hideMatrix)
 			}
-			meshRef.current.instanceMatrix.needsUpdate = true
 
-			// Set a very large bounding sphere so tracks are never culled
-			// regardless of where the vehicle travels
-			meshRef.current.geometry.boundingSphere = new Sphere(new Vector3(0, 0, 0), Infinity)
+			// Initialize instance attributes for GPU fading
+			const spawnTimeAttr = new Float32Array(MAX_TRACK_SEGMENTS).fill(-1000) // Start with old time so they're fully faded
+			const spawnOrderAttr = new Float32Array(MAX_TRACK_SEGMENTS).fill(0)
+
+			meshRef.current.geometry.setAttribute('aSpawnTime', new InstancedBufferAttribute(spawnTimeAttr, 1))
+			meshRef.current.geometry.setAttribute('aSpawnOrder', new InstancedBufferAttribute(spawnOrderAttr, 1))
+
+			meshRef.current.instanceMatrix.needsUpdate = true
 		}
 	}, [])
+
+	// Cleanup Three.js resources on unmount
+	useEffect(() => {
+		return () => {
+			geometry.dispose()
+			material.dispose()
+			trackTexture.dispose()
+		}
+	}, [geometry, material, trackTexture])
 
 	useFrame((state) => {
 		if (!vehicleController.current || !meshRef.current) return
@@ -204,47 +291,64 @@ const TireTracks = ({ vehicleController, wheelRefs, tireWidth = 0.28, tireRadius
 		const controller = vehicleController.current
 		const currentTime = state.clock.elapsedTime
 
+		// Update shader uniforms for GPU-based fading
+		material.uniforms.uTime.value = currentTime
+		material.uniforms.uSpawnCounter.value = spawnCounter.current
+
 		// Get vehicle speed and velocity
 		let speed = 0
 		let chassisVel = null
+		let chassisRotation = null
 		try {
 			chassisVel = controller.chassis().linvel()
 			speed = Math.sqrt(chassisVel.x * chassisVel.x + chassisVel.z * chassisVel.z)
+			chassisRotation = controller.chassis().rotation()
 		} catch (e) {
 			return
 		}
 
 		// Get chassis rotation for calculating vehicle direction
-		const chassisRotation = controller.chassis().rotation()
 		const chassisQuat = tempQuat.set(chassisRotation.x, chassisRotation.y, chassisRotation.z, chassisRotation.w)
 
 		// Calculate lateral slip for the vehicle
-		// Compare vehicle's velocity direction to its facing direction
 		tempRight.set(1, 0, 0).applyQuaternion(chassisQuat)
-		// Calculate lateral velocity component (how much the vehicle is sliding sideways)
 		tempVelocity.set(chassisVel.x, 0, chassisVel.z)
 		const lateralSpeed = Math.abs(tempVelocity.dot(tempRight))
 		const isSlipping = lateralSpeed > SLIP_THRESHOLD
+
+		// Get attribute references for updating
+		const aSpawnTime = meshRef.current.geometry.attributes.aSpawnTime
+		const aSpawnOrder = meshRef.current.geometry.attributes.aSpawnOrder
+
+		// Skip if attributes haven't been initialized yet
+		if (!aSpawnTime || !aSpawnOrder) return
+
+		let attributesNeedUpdate = false
 
 		// Process each wheel
 		for (let wi = 0; wi < wheelRefs.length; wi++) {
 			const wheelRef = wheelRefs[wi]
 
+			// Skip if tracking arrays are out of sync
+			if (wi >= lastSpawnPos.current.length) continue
+
 			// Check if wheel is touching ground
-			const inContact = controller.wheelIsInContact(wi)
+			let inContact = false
+			try {
+				inContact = controller.wheelIsInContact(wi)
+			} catch (e) {
+				continue
+			}
 
 			if (!inContact || !wheelRef.current) {
-				// Wheel left ground, stop tracking this wheel
 				isTracking.current[wi] = false
 				continue
 			}
 
 			// Get current wheel position and calculate ground contact point
 			wheelRef.current.getWorldPosition(tempVec)
-			// Ground is at wheel center Y minus tire radius, plus small offset to prevent z-fighting
 			tempVec.y = tempVec.y - tireRadius + 0.01
 
-			// If not tracking, start fresh
 			if (!isTracking.current[wi]) {
 				lastSpawnPos.current[wi].copy(tempVec)
 				isTracking.current[wi] = true
@@ -254,7 +358,6 @@ const TireTracks = ({ vehicleController, wheelRefs, tireWidth = 0.28, tireRadius
 			// Check distance from last spawn
 			const dist = tempVec.distanceTo(lastSpawnPos.current[wi])
 
-			// If distance is too large, reset (teleport or physics glitch)
 			if (dist > MAX_SPAWN_DISTANCE) {
 				lastSpawnPos.current[wi].copy(tempVec)
 				continue
@@ -262,7 +365,6 @@ const TireTracks = ({ vehicleController, wheelRefs, tireWidth = 0.28, tireRadius
 
 			// Only spawn tracks if wheel is slipping, moving enough, and above minimum distance
 			if (isSlipping && speed > 0.5 && dist >= MIN_SPAWN_DISTANCE) {
-				// Calculate direction of travel
 				const dirX = tempVec.x - lastSpawnPos.current[wi].x
 				const dirZ = tempVec.z - lastSpawnPos.current[wi].z
 				const dirLen = Math.sqrt(dirX * dirX + dirZ * dirZ)
@@ -280,9 +382,6 @@ const TireTracks = ({ vehicleController, wheelRefs, tireWidth = 0.28, tireRadius
 						const seg = segments[segIndex]
 						nextSegmentIndex.current = (nextSegmentIndex.current + 1) % MAX_TRACK_SEGMENTS
 
-						// If reusing an active segment, it will be replaced
-						// (no need to delete from Set, we're overwriting)
-
 						// Interpolate position
 						seg.position.lerpVectors(lastSpawnPos.current[wi], tempVec, t)
 						seg.active = true
@@ -291,93 +390,66 @@ const TireTracks = ({ vehicleController, wheelRefs, tireWidth = 0.28, tireRadius
 						seg.wheelIndex = wi
 						seg.spawnOrder = spawnCounter.current++
 
-						// Update instance matrix with scale for track width
+						// Update instance matrix
 						tempQuat.setFromAxisAngle(upAxis, rotation)
-						tempScale.set(trackWidth, 1, 1)
+						tempScale.set(tireWidth, 1, 1)
 						tempMatrix.compose(seg.position, tempQuat, tempScale)
 						meshRef.current.setMatrixAt(segIndex, tempMatrix)
 
-						// Add to active set
+						// Update GPU attributes
+						aSpawnTime.setX(segIndex, currentTime)
+						aSpawnOrder.setX(segIndex, seg.spawnOrder)
+						attributesNeedUpdate = true
+
 						activeSegments.current.add(segIndex)
 					}
 				}
 
-				// Update last spawn position
 				lastSpawnPos.current[wi].copy(tempVec)
 			}
 		}
 
-		// Update segment visibility based on age, distance from vehicle, and spawn order
-		// Only iterate active segments for performance
-		const currentSpawnOrder = spawnCounter.current
-		const chassisPos = controller.chassis().translation()
-		vehiclePos.set(chassisPos.x, chassisPos.y, chassisPos.z)
+		// Only handle distance culling on CPU - GPU handles fading
+		if (activeSegments.current.size > 0) {
+			let chassisPos
+			try {
+				chassisPos = controller.chassis().translation()
+			} catch (e) {
+				return
+			}
+			vehiclePos.set(chassisPos.x, chassisPos.y, chassisPos.z)
 
-		let hasChanges = false
-		const toRemove = []
+			let hasChanges = false
+			const toRemove = []
 
-		for (const i of activeSegments.current) {
-			const seg = segments[i]
-			const age = currentTime - seg.spawnTime
-
-			// Check distance from vehicle - remove if too far
-			const distToVehicle = seg.position.distanceTo(vehiclePos)
-			if (distToVehicle > MAX_TRACK_DISTANCE) {
-				seg.active = false
-				tempMatrix.makeTranslation(0, -1000, 0)
-				meshRef.current.setMatrixAt(i, tempMatrix)
-				toRemove.push(i)
-				hasChanges = true
-				continue
+			for (const i of activeSegments.current) {
+				const seg = segments[i]
+				if (seg.position.distanceTo(vehiclePos) > MAX_TRACK_DISTANCE) {
+					seg.active = false
+					tempMatrix.makeTranslation(0, -1000, 0)
+					meshRef.current.setMatrixAt(i, tempMatrix)
+					toRemove.push(i)
+					hasChanges = true
+				}
 			}
 
-			// Calculate time-based fade (0 = full opacity, 1 = invisible)
-			let timeFade = 0
-			if (age > TRACK_FADE_TIME) {
-				timeFade = Math.min(1, (age - TRACK_FADE_TIME) / TRACK_FADE_DURATION)
+			// Remove after iteration to avoid modifying Set while iterating
+			for (const i of toRemove) {
+				activeSegments.current.delete(i)
 			}
 
-			// Calculate distance-based fade over the ENTIRE track length
-			// Newest segments = full opacity, oldest = nearly invisible
-			const segmentAge = currentSpawnOrder - seg.spawnOrder
-			// Use a curve so fade is more gradual at the start and steeper at the end
-			const normalizedAge = Math.min(1, segmentAge / MAX_TRACK_SEGMENTS)
-			// Use quadratic easing for smoother fade - most of track visible, fades near end
-			const distanceFade = normalizedAge * normalizedAge
-
-			// Use the stronger of the two fade values
-			const fade = Math.max(timeFade, distanceFade)
-			const opacity = 1 - fade
-
-			if (fade >= 0.99) {
-				// Fully faded, deactivate and hide
-				seg.active = false
-				tempMatrix.makeTranslation(0, -1000, 0)
-				meshRef.current.setMatrixAt(i, tempMatrix)
-				toRemove.push(i)
-				hasChanges = true
-			} else {
-				// Apply fade by scaling down the segment (smaller = more transparent appearance)
-				// Combined with updating the Y position to sink slightly
-				const scale = 0.3 + opacity * 0.7 // Scale from 0.3 to 1.0
-				tempQuat.setFromAxisAngle(upAxis, seg.rotation)
-				tempScale.set(trackWidth * scale, 1, scale)
-				// Sink the track slightly as it fades
-				tempVec.copy(seg.position)
-				tempVec.y -= (1 - opacity) * 0.02
-				tempMatrix.compose(tempVec, tempQuat, tempScale)
-				meshRef.current.setMatrixAt(i, tempMatrix)
-				hasChanges = true
+			// Update GPU when needed
+			if (hasChanges || attributesNeedUpdate) {
+				meshRef.current.instanceMatrix.needsUpdate = true
 			}
-		}
-
-		// Remove deactivated segments from the Set
-		for (const i of toRemove) {
-			activeSegments.current.delete(i)
-		}
-
-		if (hasChanges) {
+			if (attributesNeedUpdate) {
+				aSpawnTime.needsUpdate = true
+				aSpawnOrder.needsUpdate = true
+			}
+		} else if (attributesNeedUpdate) {
 			meshRef.current.instanceMatrix.needsUpdate = true
+			aSpawnTime.needsUpdate = true
+			aSpawnOrder.needsUpdate = true
 		}
 	})
 
