@@ -245,10 +245,9 @@ const Terrain = () => {
 	const tileCache = useRef(new Map()) // Cache tile data to maintain stable references
 
 	// Check if grass should be disabled (XR mode, performance degraded, or mobile device)
-	const isInXR = useGameStore((state) => state.isInXR)
 	const isMobile = useGameStore((state) => state.isMobile)
 	const performanceDegraded = useGameStore((state) => state.performanceDegraded)
-	const showGrass = !isInXR && !performanceDegraded && !isMobile
+	const showGrass = !performanceDegraded && !isMobile
 
 	// Pre-compute view distance tile count
 	const tilesInViewDistance = useMemo(() => Math.ceil(viewDistance / tileSize), [viewDistance, tileSize])

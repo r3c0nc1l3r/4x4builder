@@ -36,7 +36,6 @@ const Vehicle = () => {
 	// Get vehicle store
 	const performanceDegraded = useGameStore((state) => state.performanceDegraded)
 	const isMobile = useGameStore((state) => state.isMobile)
-	const isInXR = useGameStore((state) => state.isInXR)
 
 	const chassisRef = useRef(null)
 	const chassisGroupRef = useRef(null) // Reference to the visual group that follows interpolated physics
@@ -141,7 +140,7 @@ const Vehicle = () => {
 					/>
 				</group>
 			</RigidBody>
-			{!performanceDegraded && !isInXR && !isMobile && (
+			{!performanceDegraded && !isMobile && (
 				<>
 					<Dust vehicleController={vehicleController} wheelRefs={wheelRefs} />
 					<TireTracks vehicleController={vehicleController} wheelRefs={wheelRefs} tireWidth={(config.rim_width * 2.54) / 100} tireRadius={axleHeight} />

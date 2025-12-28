@@ -76,10 +76,6 @@ const useGameStore = create((set, get) => {
 		setCameraMode: (mode) => set({ cameraMode: mode }),
 		setCameraAutoRotate: (autoRotate) => set({ cameraAutoRotate: autoRotate }),
 
-		// XR state (set by XRManager when session starts/ends)
-		isInXR: false,
-		setIsInXR: (isInXR) => set({ isInXR }),
-
 		// Saved vehicles
 		savedVehicles: (() => {
 			// Get from local storage or null.
