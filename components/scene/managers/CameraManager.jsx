@@ -481,7 +481,7 @@ const CameraManager = ({ followSpeed = 8, minGroundDistance = 0.5 }) => {
 	// Check for camera switch input each frame
 	useFrame(() => {
 		const { keys, input } = useInputStore.getState()
-		// C key or Y button to cycle cameras (works in both regular and XR mode)
+		// C key or Y button to cycle cameras
 		const switchPressed = keys.has('c') || input.buttonY
 
 		if (switchPressed && !keyPressedLastFrame.current) {

@@ -244,7 +244,7 @@ const Terrain = () => {
 	const lastTileCoord = useRef({ x: null, z: null })
 	const tileCache = useRef(new Map()) // Cache tile data to maintain stable references
 
-	// Check if grass should be disabled (XR mode, performance degraded, or mobile device)
+	// Check if grass should be disabled (performance degraded, or mobile device)
 	const isMobile = useGameStore((state) => state.isMobile)
 	const performanceDegraded = useGameStore((state) => state.performanceDegraded)
 	const showGrass = !performanceDegraded && !isMobile

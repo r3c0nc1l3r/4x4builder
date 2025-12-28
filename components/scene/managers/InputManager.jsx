@@ -24,8 +24,6 @@ const GAMEPAD = {
  * - Keyboard input
  * - Standard gamepad input
  * - Touch joystick input (via touchInput in store)
- *
- * XR controller input is handled separately in XRManager when in XR session.
  */
 const InputManager = () => {
 	const setKey = useInputStore((state) => state.setKey)

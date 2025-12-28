@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber'
-import { createXRStore, XR, XROrigin, useXRInputSourceState, useXR } from '@react-three/xr'
+import { createXRStore, XR, XROrigin, useXRInputSourceState } from '@react-three/xr'
 
 import useInputStore from '../../../store/inputStore'
 
