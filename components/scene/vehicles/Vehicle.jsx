@@ -15,7 +15,6 @@ import VehicleAudio from './VehicleAudio'
 import Dust from './Dust'
 import TireTracks from './TireTracks'
 import Wheels from './Wheels'
-import SpareWheel from './SpareWheel'
 import VehicleBody from './VehicleBody'
 
 // Vehicle component with physics
@@ -39,7 +38,7 @@ const Vehicle = () => {
 
 	const chassisRef = useRef(null)
 	const chassisGroupRef = useRef(null) // Reference to the visual group that follows interpolated physics
-	const bodyRef = useRef(null) // Reference to body group for SpareWheel to follow
+	const bodyRef = useRef(null) // Reference to body group for spare wheel to follow
 	const wheelRefsArray = useRef([{ current: null }, { current: null }, { current: null }, { current: null }])
 	const wheelRefs = wheelRefsArray.current
 
@@ -123,20 +122,9 @@ const Vehicle = () => {
 						roughness={config.roughness}
 						wheelPositions={wheelPositions}
 						wheelRefs={wheelRefs}
-					/>
-					<SpareWheel
-						bodyId={config.body}
 						spare={config.spare}
+						bodyId={config.body}
 						bodyRef={bodyRef}
-						rim={config.rim}
-						rim_diameter={config.rim_diameter}
-						rim_width={config.rim_width}
-						rim_color={config.rim_color}
-						rim_color_secondary={config.rim_color_secondary}
-						tire={config.tire}
-						tire_diameter={config.tire_diameter}
-						color={config.color}
-						roughness={config.roughness}
 					/>
 				</group>
 			</RigidBody>

@@ -6,7 +6,6 @@ import vehicleConfigs from '../../../vehicleConfigs'
 import useVehicleDimensions from '../../../hooks/useVehicleDimensions'
 
 import Wheels from './Wheels'
-import SpareWheel from './SpareWheel'
 import VehicleBody from './VehicleBody'
 import VehicleAudio from './VehicleAudio'
 import PlayerLabel from './PlayerLabel'
@@ -113,7 +112,7 @@ class TransformBuffer {
  */
 const RemoteVehicle = ({ playerId, playerName, vehicleConfig, initialTransform, onRef }) => {
 	const groupRef = useRef()
-	const bodyRef = useRef(null) // Reference to body group for SpareWheel to follow
+	const bodyRef = useRef(null) // Reference to body group for spare wheel to follow
 	const bufferRef = useRef(new TransformBuffer())
 	const wheelRefsArray = useRef([{ current: null }, { current: null }, { current: null }, { current: null }])
 	const wheelRefs = wheelRefsArray.current
@@ -248,20 +247,9 @@ const RemoteVehicle = ({ playerId, playerName, vehicleConfig, initialTransform, 
 					roughness={roughness}
 					wheelPositions={wheelPositions}
 					wheelRefs={wheelRefs}
-				/>
-				<SpareWheel
-					bodyId={validBody}
 					spare={spare}
+					bodyId={validBody}
 					bodyRef={bodyRef}
-					rim={rim}
-					rim_diameter={rim_diameter}
-					rim_width={rim_width}
-					rim_color={rim_color}
-					rim_color_secondary={rim_color_secondary}
-					tire={tire}
-					tire_diameter={tire_diameter}
-					color={color}
-					roughness={roughness}
 				/>
 			</group>
 		</group>
