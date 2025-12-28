@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { Mesh, Color } from 'three'
+import { Color } from 'three'
 import useGameStore from '../store/gameStore'
 
 const COLORS = {
@@ -119,23 +119,11 @@ export default function useMaterialProperties() {
 
 	// Set object materials.
 	const setObjectMaterials = useCallback(
-		(object, color, roughness, rim_color, rim_color_secondary) => {
-			if (!object) return
+		(materials, color, roughness, rim_color, rim_color_secondary) => {
+			if (!materials || materials.size === 0) return
 
-			// Traverse object.
-			object.traverseVisible((child) => {
-				if (child instanceof Mesh) {
-					// Cast shadows from mesh.
-					child.castShadow = true
-
-					// Ensure that the material is always an array.
-					const materials = Array.isArray(child.material) ? child.material : [child.material]
-
-					// Set material properties for each material.
-					materials.forEach((material) => {
-						setMaterials(material, color, roughness, rim_color, rim_color_secondary, lightsOn)
-					})
-				}
+			materials.forEach((material) => {
+				setMaterials(material, color, roughness, rim_color, rim_color_secondary, lightsOn)
 			})
 		},
 		[lightsOn]

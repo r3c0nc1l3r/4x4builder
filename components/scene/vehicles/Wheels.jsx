@@ -3,7 +3,7 @@ import { memo } from 'react'
 import Wheel from './Wheel'
 
 // Wheels - container component that positions wheel groups
-const Wheels = memo(({ rim, rim_diameter, rim_width, rim_color, rim_color_secondary, tire, tire_diameter, tire_muddiness, color, roughness, wheelPositions, wheelRefs, cloneMaterials = false }) => {
+const Wheels = memo(({ rim, rim_diameter, rim_width, rim_color, rim_color_secondary, tire, tire_diameter, tire_muddiness, color, roughness, wheelPositions, wheelRefs }) => {
 	return (
 		<group name='Wheels'>
 			{wheelPositions.map(({ key, rotation, ...transform }, index) => (
@@ -21,7 +21,6 @@ const Wheels = memo(({ rim, rim_diameter, rim_width, rim_color, rim_color_second
 							tire_muddiness={tire_muddiness}
 							color={color}
 							roughness={roughness}
-							cloneMaterials={cloneMaterials}
 						/>
 					</group>
 				</group>

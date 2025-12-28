@@ -16,12 +16,12 @@ const Addon = memo(({ path, color, roughness, position }) => {
 	const gltf = useGLTF(path)
 
 	// Clone scene once (only depends on gltf.scene)
-	const scene = useMemo(() => cloneWithMaterials(gltf.scene), [gltf.scene])
+	const { scene, materials } = useMemo(() => cloneWithMaterials(gltf.scene), [gltf.scene])
 
 	// Apply materials synchronously before paint to avoid flash
 	useLayoutEffect(() => {
-		setObjectMaterials(scene, color, roughness)
-	}, [scene, setObjectMaterials, color, roughness])
+		setObjectMaterials(materials, color, roughness)
+	}, [materials, setObjectMaterials, color, roughness])
 
 	return <primitive object={scene} position={position || DEFAULT_POSITION} />
 })
@@ -42,12 +42,15 @@ const VehicleBody = forwardRef(({ id, height, color, roughness, addons, lighting
 	const bodyGltf = useGLTF(vehicleConfig.model)
 
 	// Clone scene once (only depends on gltf.scene)
-	const bodyScene = useMemo(() => cloneWithMaterials(bodyGltf.scene), [bodyGltf.scene])
+	const { scene: bodyScene, materials: bodyMaterials } = useMemo(
+		() => cloneWithMaterials(bodyGltf.scene),
+		[bodyGltf.scene]
+	)
 
 	// Apply materials synchronously before paint to avoid flash
 	useLayoutEffect(() => {
-		setObjectMaterials(bodyScene, color, roughness)
-	}, [bodyScene, setObjectMaterials, color, roughness])
+		setObjectMaterials(bodyMaterials, color, roughness)
+	}, [bodyMaterials, setObjectMaterials, color, roughness])
 
 	// Memoize the set of replaceable meshes
 	const replaceableMeshes = useMemo(() => {

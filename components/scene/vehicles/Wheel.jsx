@@ -4,7 +4,7 @@ import Rim from './Rim'
 import Tire from './Tire'
 
 // Single wheel component - renders a rim and tire together
-const Wheel = memo(({ rim, rim_diameter, rim_width, rim_color, rim_color_secondary, tire, tire_diameter, tire_muddiness = 0, color, roughness, cloneMaterials = false }) => {
+const Wheel = memo(({ rim, rim_diameter, rim_width, rim_color, rim_color_secondary, tire, tire_diameter, tire_muddiness = 0, color, roughness }) => {
 	// Create keys that include all properties that require a fresh geometry/model
 	const rimKey = `${rim}-${rim_diameter}-${rim_width}`
 	const tireKey = `${tire}-${tire_diameter}-${rim_diameter}-${rim_width}`
@@ -21,7 +21,6 @@ const Wheel = memo(({ rim, rim_diameter, rim_width, rim_color, rim_color_seconda
 					rim_color_secondary={rim_color_secondary}
 					color={color}
 					roughness={roughness}
-					cloneMaterials={cloneMaterials}
 				/>
 			</Suspense>
 			<Suspense fallback={null}>

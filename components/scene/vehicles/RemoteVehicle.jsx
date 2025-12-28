@@ -248,7 +248,6 @@ const RemoteVehicle = ({ playerId, playerName, vehicleConfig, initialTransform, 
 					roughness={roughness}
 					wheelPositions={wheelPositions}
 					wheelRefs={wheelRefs}
-					cloneMaterials={true}
 				/>
 				<SpareWheel
 					bodyId={validBody}

@@ -58,7 +58,6 @@ const SpareWheel = memo(({ bodyId, spare, bodyRef, rim, rim_diameter, rim_width,
 				tire_muddiness={0}
 				color={color}
 				roughness={roughness}
-				cloneMaterials={true}
 			/>
 		</group>
 	)

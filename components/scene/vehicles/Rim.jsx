@@ -6,16 +6,16 @@ import useMaterialProperties from '../../../hooks/useMaterialProperties'
 import cloneWithMaterials from '../../../utils/cloneWithMaterials'
 
 // Rim component - loads and renders a single rim
-const Rim = memo(({ rim, rim_diameter, rim_width, rim_color, rim_color_secondary, color, roughness, cloneMaterials = false }) => {
+const Rim = memo(({ rim, rim_diameter, rim_width, rim_color, rim_color_secondary, color, roughness }) => {
 	const { setObjectMaterials } = useMaterialProperties()
 
 	// Load rim model
 	const rimGltf = useGLTF(vehicleConfigs.wheels.rims[rim].model)
 
-	// Clone rim scene (optionally with unique materials for remote vehicles)
-	const rimScene = useMemo(
-		() => (cloneMaterials ? cloneWithMaterials(rimGltf.scene) : rimGltf.scene.clone()),
-		[rimGltf.scene, cloneMaterials]
+	// Clone rim scene with unique materials
+	const { scene: rimScene, materials: rimMaterials } = useMemo(
+		() => cloneWithMaterials(rimGltf.scene),
+		[rimGltf.scene]
 	)
 
 	// Calculate rim scale as a percentage of diameter
@@ -32,8 +32,8 @@ const Rim = memo(({ rim, rim_diameter, rim_width, rim_color, rim_color_secondary
 
 	// Set rim color
 	useEffect(() => {
-		setObjectMaterials(rimScene, color, roughness, rim_color, rim_color_secondary)
-	}, [rimScene, setObjectMaterials, rim_color, rim_color_secondary, color, roughness])
+		setObjectMaterials(rimMaterials, color, roughness, rim_color, rim_color_secondary)
+	}, [rimMaterials, setObjectMaterials, rim_color, rim_color_secondary, color, roughness])
 
 	return <primitive name='Rim' object={rimScene} scale={[odScale, odScale, widthScale]} />
 })
