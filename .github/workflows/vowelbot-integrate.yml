@@ -352,6 +352,31 @@ jobs:
             PR_CONTEXT="$(printf '%s' "${{ steps.pr_context.outputs.pr_context_b64 }}" | base64 -d || true)"
           fi
           FULL_PROMPT=$(cat <<EOF
+          ## Discovery phase (do this first, before any implementation)
+
+          Before making any changes, perform a thorough discovery phase to understand the repository and its state:
+
+          1. **Read documentation**
+             - README.md, USAGE.md, CONTRIBUTING.md, and any other root-level docs
+             - User-created plans (e.g., PLAN.md, docs/*.md, .ai/plan/*.md, vowel integration plan, implementation plan)
+             - Any .vowelbot/ or .opencode/ config or notes in the repo
+             - Package.json scripts, dependencies, and project metadata
+
+          2. **Understand app state**
+             - Project type (React, Next.js, TanStack Router, vanilla, etc.) and structure
+             - Existing voice/vowel integrations, if any
+             - Build setup (Vite, webpack, etc.) and entry points
+             - Routing and state management patterns in use
+
+          3. **Review the code**
+             - Key entry files (main.tsx, App.tsx, layout files, router setup)
+             - Existing providers, context, or stores
+             - Patterns that may conflict with or inform the vowel integration
+
+          Only after completing this discovery phase and forming a clear picture of the app should you begin implementation. Do not skip or abbreviate discovery.
+
+          ---
+
           Available local skills:
           - .opencode/skills/vowel-react/SKILL.md
           - .opencode/skills/vowel-vanilla/SKILL.md
